@@ -1,0 +1,511 @@
+---
+header-includes: |
+  \usepackage{fancyhdr}
+  \pagestyle{fancy}
+  \lhead{Group 2 \\ }
+  \chead{IST 687 M403 \\ Project - Bakery Transaction Data Analysis}
+  \rhead{Submission Date: 12/19/2018 \\ Due Date: 12/19/2018}
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    out.width = "100%",
+    fig.width = 8,
+    fig.height = 6
+)
+
+# remove all variables
+remove(list = ls(all.names = TRUE))
+
+detachAllPackages <- function() {
+  basic.packages.blank <-  c("stats", 
+                             "graphics", 
+                             "grDevices", 
+                             "utils", 
+                             "datasets", 
+                             "methods", 
+                             "base")
+  basic.packages <- paste("package:", basic.packages.blank, sep = "")
+
+  package.list <- search()[ifelse(unlist(gregexpr("package:", search())) == 1, 
+                                  TRUE, 
+                                  FALSE)]
+
+  package.list <- setdiff(package.list, basic.packages)
+
+  if (length(package.list) > 0)  for (package in package.list) {
+    detach(package, character.only = TRUE)
+    print(paste("package ", package, " detached", sep = ""))
+  }
+}
+
+detachAllPackages()
+
+if (!require(lubridate)) {
+  install.packages('lubridate')
+  require(lubridate)
+}
+
+if (!require(zoo)) {
+  install.packages('zoo')
+  require(zoo)
+}
+
+if (!require(dplyr)) {
+  install.packages('dplyr')
+  require(dplyr)
+}
+
+if (!require(ggplot2)) {
+  install.packages('ggplot2')
+  require(ggplot2)
+}
+
+if (!require(arules)) {
+  install.packages('arules')
+  require(arules)
+}
+
+if(!require(arulesViz)) {
+  install.packages('arulesViz')
+  require(arulesViz)
+}
+
+if(!require(reshape2)) {
+  install.packages('reshape2')
+  require(reshape2)
+}
+
+if(!require(gridExtra)) {
+  install.packages('gridExtra')
+  require(gridExtra)
+}
+
+if (!require(caret)) {
+  install.packages('caret')
+  require(caret)
+}
+
+if(!require(ellipse)) {
+  install.packages("ellipse")
+  require(ellipse)
+}
+```
+                                  #'#Group 2 Team Members
+
+                                      * Brian Bennett
+                                     * Gayathri Sanjeev
+                                        * Lok Ngan
+                                   * Michael Chechenitsky    
+# Introduction
+
+In this project, we aim to explore the transaction data of a bakery, located in Edinburgh, and study the purchasing behavior of consumers of bakery as related to time and weather.  
+
+In particular, we are looking to accomplish the following:  
+
+* Determine what are the factors that drive businesses to a bakery:  
+    + Time of day
+    + Day of week
+* Develop understanding on the purchasing behaviors of bakery customers:  
+    + Popular items
+    + Items that are frequently bought together
+* Does weather play a factor on bakery transactions?
+
+The bakery dataset used for this project is obtained from Kaggle:  
+
+https://www.kaggle.com/sulmansarwar/transactions-from-a-bakery
+
+Weather data used for this project is obtained from the School of Geosciences from the University of Edinburgh:  
+
+https://www.geos.ed.ac.uk/~weather/jcmb_ws/
+
+
+\newpage
+
+## Bakery Data
+
+#### Load and clean bakery data
+
+The bakery data from Kaggle is pretty clean and only a small amount of data cleaning is needed.  
+
+```{r Bakery Data - Load and Clean}
+
+# dataframe of TimeOfDay
+
+GetBakeryData <- function(){
+  df <- read.csv('C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/BreadBasket_DMS.csv', header=TRUE, stringsAsFactors = FALSE)
+  
+  # Add hour interval to data
+  df$Hour <- as.numeric(lapply(df$Time, function(x){substring(x,1,2)}))
+  
+  # Format date as date
+  df$Date <- as.Date(df$Date,"%Y-%m-%d")
+  
+  # Remove NONE
+  df <- df[!df$Item %in% c('NONE','Adjustment'),]
+  df <- df[c(1,5,3,4)]
+  
+  return(df)
+}
+
+dfBakery <- GetBakeryData()
+
+dfBakery.Day <- dfBakery %>%
+  group_by(Date) %>%
+  summarise(count = length(Item))
+
+```
+
+The data is loaded into a dataframe, named _dfBakery_, and the following operations were done to the dataframe:  
+* Extracted the hour from time  
+* Reformatted the date as date  
+* Deleted items that are not useful to our analysis ('NONE' and 'adjustment')  
+* Removed unnecessary columns  
+
+A separate dataframe, named _dfBakery.Day_, by aggregating the data by day is also generated.  
+
+#### Analyze Bakery Data
+
+An initial review of the bakery data was done by gaining some understanding on how day and time drive businesses to the bakery.  
+
+##### Bakery transactions by day
+
+```{r Bakery Data - Transactions by Day}
+b1 <- dfBakery %>%
+  mutate(Weekday = wday(Date,label=TRUE)) %>%
+  group_by(Weekday) %>%
+  summarise(Count = length(Item)) %>%
+  ggplot(aes(x=Weekday,y=Count)) +
+  theme_light() +
+  geom_bar(stat='identity',alpha=0.75) +
+  labs(title=paste('Bakery transactions by day'),
+     x = 'Day',
+     y = 'Count')
+b1
+```
+
+One can see from the chart above that Saturday is the most popular day to go to a bakery, followed by Sunday and Friday.  
+
+##### Bakery transactions by hour
+
+```{r Bakery Data - Transactions by Hour}
+b2 <- dfBakery %>%
+  group_by(Hour) %>%
+  summarise(Count = length(Item)) %>%
+  ggplot(aes(x=Hour,y=Count)) +
+  theme_light() +
+  geom_bar(stat='identity',alpha=0.75) +
+  scale_x_continuous(breaks = seq(0,23, by = 3)) +
+  labs(title=paste('Bakery transactions by hour'),
+     x = 'Hour',
+     y = 'Count')
+b2
+```
+
+And, Lunch hours (11am and 12pm) are the most popular times to go to the bakery.  
+
+\newpage
+
+#### Purchasing behaviors
+
+Followed by reviewing data by day and time, the purchasing behaviors of the customers were analyzed.  
+
+##### Popular items
+
+```{r Bakery Data - Popular Items}
+b3 <- dfBakery %>%
+  group_by(Item) %>%
+  summarise(Count = length(Item)) %>%
+  top_n(10) %>%
+  ggplot(aes(x=reorder(Item,-Count),y=Count)) +
+  theme_light() +
+  geom_bar(stat='identity',alpha=0.75) +
+  labs(title=paste('Popular bakery items'),
+     x = 'Item',
+     y = 'Count')
+b3
+```
+
+The top 10 most popular items that were being bought are Coffee, Bread, Tea, Cake, Pastry, Sandwich, Medialuna, Hot chocolate, Cookies and Brownie.  
+
+##### Convert dataframe to transactions data
+
+```{r Bakery Data - Transactions Load and clean}
+dfBakery.trans <- read.transactions("C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/BreadBasket_DMS.csv",
+                       format="single",
+                       cols=c(3,4),
+                       sep=","
+                       )
+```
+
+##### Items that are frequently bought together
+
+```{r Bakery Data - Apriori}
+ruleset <- apriori(dfBakery.trans,parameter=list(support=0.005,confidence=0.5), 
+   appearance = list(none = c("NONE", "Adjustment"),
+   default="both"))
+
+inspect(sort(ruleset, by='lift', decreasing = TRUE))
+plot(ruleset, method="graph")
+```
+
+With a support of 0.005 and confidence of 0.5, 17 rules were generated using the apriori algorithm.  The result is displayed in the graph above.
+
+## Weather Data Analysis
+
+#### Load Weather Data
+
+The weather data is divided by month.  Since there are seven months of bakery data, seven months of weather data is appended together into a single dataframe.Some data cleaning is necessary as it was found that the timestamp has inconsistent formatting between the months, there are also gaps within the data.
+
+```{r Weather Data - Load and Clean}
+GetWeatherData <- function() {
+  nameofColumns <- c('Timestamp','RecordID','Year','Day','Hour','Minute',
+                 'BattV_Avg','SWtot_Avg','SWdif_Avg',
+                 'Wdir_Avg', 'Wavg_Avg','Wmax_Max',
+                 'Tair_Avg','RHum_Avg','Pair_Avg',
+                 'Rain','Rintensity_Avg','Hail')
+  
+  csvFiles <- c('C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2016_Oct.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2016_Nov.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2016_Dec.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2017_Jan.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2017_Feb.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2017_Mar.csv','C:/Users/gagd2/Desktop/Syracuse/IST_687/Assignments/Project/JCMB_2017_Apr.csv')
+  
+  df <- NULL
+  
+  for (file in csvFiles) {
+    data <- read.csv(file,
+                     skip = 4,
+                     col.names = nameofColumns,
+                     stringsAsFactors = FALSE)
+    
+    if (grepl('2016',file)) {
+      data$Date <- as.Date('2015-12-31') + data$Day
+    } else if (grepl('2017', file)) {
+      data$Date <- as.Date('2016-12-31') + data$Day
+    }
+    
+    data <- data[c(19,2,5,6,11,13,14,17)]
+    
+    df <- rbind(df,data)
+  }
+  
+  # filter weather data down to the dates where we have bakery data
+  df<- df[df$Date > '2016-10-29' & df$Date <'2017-04-10',]
+  df$Rintensity_Avg <- df$Rintensity_Avg/60 # Convert Rintensity from mm/h to mm/min
+  df[c(5:8)] <- sapply(df[c(5:8)],as.numeric)
+
+  df$Tair_Avg <- na.approx(df$Tair_Avg,index(df),na.rm = FALSE)
+  
+  return(df)
+}
+
+dfWeather <- GetWeatherData()
+
+dfWeather.Hour <- dfWeather %>%
+    group_by(Date, Hour) %>%
+    summarise(Wind=mean(Wavg_Avg),
+              MaxTemp=max(Tair_Avg),
+              MinTemp=min(Tair_Avg),
+              AvgTemp=mean(Tair_Avg),
+              Hum=mean(RHum_Avg),
+              Rain=sum(Rintensity_Avg))
+
+dfWeather.Day <- dfWeather %>%
+    group_by(Date) %>%
+    summarise(Wind=mean(Wavg_Avg),
+              MaxTemp=max(Tair_Avg),
+              MinTemp=min(Tair_Avg),
+              AvgTemp=mean(Tair_Avg),
+              Hum=mean(RHum_Avg),
+              Rain=sum(Rintensity_Avg))
+```
+
+Here are the steps that was taken to clean the weather data:  
+
+* Remove header rows that are not used
+* Recalculate the date
+* Remove columns that are not used
+* rbind the dataframes into one big dataframe using a loop
+* Filter for only the date range with bakery data
+* Convert rain intensity from mm/h to mm/min
+* Convert numerical columns to numeric format
+* Interpolate for missing data
+
+The dataframe is named _dfWeather_, two other dataframes were created to aggregate this data by hour and by day. They are named _dfWeather.Hour_ and _dfWeather.Day_, respectively.
+
+## Combine Bakery Data with Weather Data
+
+```{r Combined Data - Load and Clean}
+dfCombined.Day <- merge(dfBakery.Day,dfWeather.Day[c(1,2,5,6,7)],by='Date')
+```
+
+The bakery data are combined with weather data by merging on the date column.  
+
+#### Heat map of weather versus bakery transactions
+
+```{r Combined Data - Heat map}
+dfCombined.m <- melt(dfCombined.Day,id='Date')
+dfCombined.m <- dfCombined.m %>%
+  group_by(variable) %>%
+  mutate(rescale = value/max(value))
+
+ggplot(dfCombined.m,aes(Date,variable)) + 
+  geom_tile(aes(fill = rescale), colour = "white")+
+  scale_fill_gradient(low = "white", high = "firebrick3") +
+  labs(title=paste('Heat map'),
+       x = 'Date',
+       y = 'Variable')
+```
+
+A heat map was created to see the correlation between number of bakery transactions versus the different variables.  The trend is inconclusive. Hence, further analysis is done using Time Series plots.
+
+#### Time series plot of weather versus bakery transactions
+
+```{r Combined Data - Time Series}
+p1 <- ggplot(dfCombined.Day, aes(Date)) +
+  geom_line(aes(y = Wind, color = 'Wind')) +
+  geom_line(aes(y = count/30, color = 'Transactions')) + 
+  scale_y_continuous(sec.axis = sec_axis(~.*30, name = 'Transactions')) +
+    scale_colour_manual(breaks = c('Transactions','Wind'), 
+                      values = c('Transactions' = 'black', 'Wind' = 'red')) +
+  labs (y = 'Wind (m/s)',
+        x = 'Date') +
+  theme_light() +
+  theme(legend.title = element_blank(),
+        legend.position='bottom',
+        legend.text = element_text(size = 8))
+
+p2 <- ggplot(dfCombined.Day, aes(Date)) +
+  geom_line(aes(y = AvgTemp, colour = 'Average Temperature')) +
+  geom_line(aes(y = count/15, colour = 'Transactions')) + 
+  scale_y_continuous(sec.axis = sec_axis(~.*15, name = 'Transactions')) +
+  scale_colour_manual(breaks = c('Transactions','Average Temperature'), 
+                      values = c('Transactions' = 'black', 'Average Temperature' = 'red')) +
+  labs (y = 'Temperature (°C)',
+        x = 'Date') +
+  theme_light() +
+  theme(legend.title = element_blank(),
+        legend.position='bottom',
+        legend.text = element_text(size = 8))
+
+p3 <- ggplot(dfCombined.Day, aes(Date)) +
+  geom_line(aes(y = Hum, colour = 'Humidity')) +
+  geom_line(aes(y = count/2, colour = 'Transactions')) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = 'Transactions')) +
+  scale_colour_manual(breaks = c('Transactions','Humidity'), 
+                      values = c('Transactions' = 'black', 'Humidity' = 'red')) +
+  labs (y = 'Humidity (%)',
+        x = 'Date') +
+  theme_light() +
+  theme(legend.title = element_blank(),
+        legend.position='bottom',
+        legend.text = element_text(size = 8))
+
+p4 <- ggplot(dfCombined.Day, aes(Date)) +
+  geom_line(aes(y = Rain, colour = 'Rain')) +
+  geom_line(aes(y = count/10, colour = 'Transactions')) +
+  scale_y_continuous(sec.axis = sec_axis(~.*10, name = 'Transactions')) +
+  scale_colour_manual(breaks = c('Transactions','Rain'), 
+                      values = c('Transactions' = 'black', 'Rain' = 'red')) +
+  labs (y = 'Rain (mm)',
+        x = 'Date') +
+  theme_light() +
+  theme(legend.title = element_blank(),
+        legend.position='bottom',
+        legend.text = element_text(size = 8))
+
+grid.arrange(grobs = list(p1,p2,p3,p4))
+```
+
+With time series plots, it is pretty clear that the various weather variables are not sigificant inputs in the number of bakery transactions.  However, can weather be used to identify what items are being purchased by the customers? Let's try to get some answers through prediction models.
+
+## Prediction Models
+
+```{r Combined Data - Prediction Model}
+# Reference: https://machinelearningmastery.com/machine-learning-in-r-step-by-step/
+
+dfBakery <- dfBakery[!duplicated(dfBakery),] # Each transaction can only have one of each item (a customer buying 5 coffee, will only be counted as a customer who purchased coffee)
+
+dfBakery.Top10 <- dfBakery[dfBakery$Item %in% c('Coffee', 'Bread', 'Tea', 'Cake', 'Pastry', 
+                                           'Sandwich', 'Medialuna', 'Hot chocolate', 'Cookies', 'Brownie'),c(1,2,4)]
+
+dfCombined <- merge(dfBakery.Top10,dfWeather.Hour,by=c('Date','Hour'))
+
+TimeOfDay <- cbind(Hour = seq(0,23),
+                   TimeOfDay = c(rep(1,6), # 0000 to 0500, early morning
+                                 rep(2,6), # 0600 to 1100, morning
+                                 rep(3,6), # 1200 to 1700, afternoon
+                                 rep(4,6)) # 1800 to 2300, evening
+)
+
+dfCombined <- merge(dfCombined,TimeOfDay,by='Hour')
+dfCombined$Item <- as.factor(dfCombined$Item)
+dfCombined$Weekday <- wday(dfCombined$Date)
+
+dfCombined <- dfCombined[c(10,11,7,8,3)] # SVM and RF take too long, removed some variables
+
+trainIndex <- createDataPartition(dfCombined$Item, p = .7, list = FALSE, times = 1) #70/30 split
+
+trainset <- dfCombined[trainIndex,]
+testset <- dfCombined[-trainIndex,]
+
+x <- trainset[,c(1:4)]
+y <- trainset$Item
+
+control <- trainControl(method="cv", number=10) # 10-folds cross validation
+metric <- "Accuracy"
+s <- 2 # Change this before each run
+
+# a) linear algorithms
+set.seed(s)
+fit.lda <- train(Item~., data=trainset, method="lda", metric=metric, trControl=control)
+# b) nonlinear algorithms
+# CART
+set.seed(s)
+fit.cart <- train(Item~., data=trainset, method="rpart", metric=metric, trControl=control)
+# kNN
+set.seed(s)
+fit.knn <- train(Item~., data=trainset, method="knn", metric=metric, trControl=control)
+# c) advanced algorithms
+# SVM
+set.seed(s)
+# fit.svm <- train(Item~., data=trainset, method="svmRadial", metric=metric, trControl=control)
+# Random Forest
+set.seed(s)
+fit.rf <- train(Item~., data=trainset, method="rf", metric=metric, trControl=control)
+
+ 	
+# summarize accuracy of models
+# results <- resamples(list(lda=fit.lda, cart=fit.cart, knn=fit.knn, svm=fit.svm,rf=fit.rf))
+results <- resamples(list(lda=fit.lda, cart=fit.cart, knn=fit.knn,rf=fit.rf))
+
+summary(results)
+
+dotplot(results)
+```
+
+By taking only the top 10 most popular bakery items into consideration, four prediction models were generated using simple machine learning techniques:  
+
+* Linear Discriminant Analysis
+* Classification and Regression Trees
+* K-Kearest Neighbors
+* Random Forests
+
+SVM model was omitted because it took a very long time to run. But, the other four algorithms were able to help draw the conclusion that weather is not the best predictor to predict what is being purchased at a bakery at a given point in time.
+
+#### Linear Discriminant Analysis
+
+```{r Combined Data - lda}
+predictions <- predict(fit.lda, testset)
+confusionMatrix(predictions, testset$Item)
+```
+
+In reviewing the confusion matrix, it was determined that while Linear Discriminant Analysis has the best accuracy, it simply predicts that everyone purchases coffee.
+
+# Conclusion
+
+The goal of this project was to determine the factors that drive the bakery business, develop an understanding of the purchasing behaviors of the customers and determine if weather plays a factor in the bakery transactions.
+
+In studying the purchasing behaviors, one can confirm what you would intuitively expect; people visit the bakery in the mornings and weekends are more popular than week days.  In addition, our linear discriminant analysis showed that while there are several significant rules, they all point to the same outcome, people buy coffee plus another item or two when visiting the bakery. 
+
+The last aspect of our analysis was to correlate weather to the purchasing behaviors of customers. While this would have seemed intuitive, no correlation was found between weather conditions and the bakery transactions. One important thing to take into consideration here is the bakery store being located in Edinburgh, UK. Weather is relatively mild and constant in Edinburgh. It rains often and the city doesn't have a clear demarcation of four seasons.  Hence, a study of similar bakery data from a location which experiences more significant weather patterns and seasons may reveal a more significant correlation between weather and purchasing behaviors and give us more valuable insights. 
