@@ -1,0 +1,14 @@
+The main data consists of Chicago crime incidents recorded from 2001 to 2017
+(https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2).
+
+Two different datasets were collected for weather data. The difference between the two is the different areas
+in the city they were collected from. The first weather dataset was collected from the City of Chicago website
+(https://data.cityofchicago.org/Parks-Recreation/Beach-Weather-Stations-Automated-Sensors/k7hf-8y75).
+The Chicago Park District maintains weather sensors at beaches along Chicago's Lake Michigan lakefront.
+These sensors generally capture the indicated measurements hourly while the sensors are in operation during the summer.
+During other seasons and at some other times, information from the sensors may not be available.
+
+The second weather dataset (https://www.kaggle.com/yochanan/chicago-weather), contributed to kaggle.com from measurements
+taken between 2008 and 2015 at Chicago Midway Airport by NOAA (https://www.ncdc.noaa.gov/). This was data which was specifically
+curated by a Kaggle.com user for use with the Chicago crimes data (a subset of the data mentioned above)
+also available from the same site. It is offered under the Creative Commons license.
